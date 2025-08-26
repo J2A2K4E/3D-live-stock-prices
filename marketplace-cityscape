@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market Metropolis</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+    }
+
+    #canvas-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #info-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 20px;
+      max-width: 300px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      z-index: 100;
+      transition: all 0.3s ease;
+    }
+
+    #info-panel.hidden {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 15px;
+      z-index: 100;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    #market-stats {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 15px;
+      z-index: 100;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    .building-pulse {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.7;
+      }
+    }
+
+    .stock-positive {
+      color: #10b981;
+    }
+
+    .stock-negative {
+      color: #ef4444;
+    }
+
+    .stock-neutral {
+      color: #6b7280;
+    }
+
+    @media (max-width: 768px) {
+      #info-panel {
+        right: 10px;
+        top: 10px;
+        max-width: calc(100vw - 20px);
+        padding: 15px;
+      }
+
+      #controls {
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+      }
+
+      #market-stats {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+      }
+    }
+
+    .dark {
+      color-scheme: dark;
+    }
+
+    .dark #info-panel,
+    .dark #controls,
+    .dark #market-stats {
+      background: rgba(31, 41, 55, 0.95);
+      color: white;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-900">
+  <div id="canvas-container">
+    <canvas id="three-canvas"></canvas>
+
+    <!-- Market Statistics -->
+    <div id="market-stats" class="text-sm">
+      <h3 class="font-bold text-lg mb-2">Market Overview</h3>
+      <div class="space-y-1">
+        <div class="flex justify-between">
+          <span>Total Stocks:</span>
+          <span id="total-stocks" class="font-mono">25</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Gainers:</span>
+          <span id="gainers" class="font-mono stock-positive">0</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Losers:</span>
+          <span id="losers" class="font-mono stock-negative">0</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Last Update:</span>
+          <span id="last-update" class="font-mono text-xs">--:--</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stock Information Panel -->
+    <div id="info-panel" class="hidden">
+      <h3 class="font-bold text-lg mb-3" id="stock-ticker">Select a Building</h3>
+      <div class="space-y-2">
+        <div class="flex justify-between">
+          <span class="text-gray-600 dark:text-gray-400">Price:</span>
+          <span id="stock-price" class="font-mono font-bold">--</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600 dark:text-gray-400">Change:</span>
+          <span id="stock-change" class="font-mono font-bold">--</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600 dark:text-gray-400">Volume:</span>
+          <span id="stock-volume" class="font-mono">--</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600 dark:text-gray-400">Market Cap:</span>
+          <span id="stock-cap" class="font-mono">--</span>
+        </div>
+      </div>
+      <div class="mt-4 pt-3 border-t border-gray-200 dark:border-gray-600">
+        <button id="close-panel" class="w-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 px-3 py-2 rounded-lg text-sm transition-colors">
+          Close
+        </button>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div id="controls" class="text-sm">
+      <h3 class="font-bold mb-2">Controls</h3>
+      <div class="space-y-2">
+        <button id="toggle-auto-update" class="w-full bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition-colors">
+          Auto Update: ON
+        </button>
+        <button id="manual-update" class="w-full bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs transition-colors">
+          Update Now
+        </button>
+        <div class="text-xs text-gray-600 dark:text-gray-400 mt-2">
+          Click buildings for details<br>
+          Mouse: Rotate view
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Dark mode detection
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.add('dark');
+    }
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+      if (event.matches) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    });
+    // Market Metropolis Implementation
+    class MarketMetropolis {
+      constructor() {
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: document.getElementById('three-canvas'),
+          antialias: true
+        });
+        this.buildings = [];
+        this.stocks = [];
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
+        this.selectedBuilding = null;
+        this.autoUpdate = true;
+        this.updateInterval = null;
+        this.init();
+        this.generateMockData();
+        this.buildCity();
+        this.setupEventListeners();
+        this.startAutoUpdate();
+      }
+      init() {
+        // Renderer setup
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setClearColor(0x1a1a2e);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        // Camera position
+        this.camera.position.set(15, 12, 15);
+        this.camera.lookAt(0, 0, 0);
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+        this.scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 5);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        this.scene.add(directionalLight);
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(20, 20);
+        const groundMaterial = new THREE.MeshLambertMaterial({
+          color: 0x2a2a3e
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        this.scene.add(ground);
+        // Controls for camera movement
+        this.setupCameraControls();
+      }
+      setupCameraControls() {
+        let isDragging = false;
+        let previousMousePosition = {
+          x: 0,
+          y: 0
+        };
+        const canvas = this.renderer.domElement;
+        canvas.addEventListener('mousedown', (e) => {
+          isDragging = true;
+          previousMousePosition = {
+            x: e.clientX,
+            y: e.clientY
+          };
+        });
+        canvas.addEventListener('mousemove', (e) => {
+          if (isDragging) {
+            const deltaMove = {
+              x: e.clientX - previousMousePosition.x,
+              y: e.clientY - previousMousePosition.y
+            };
+            const rotationSpeed = 0.005;
+            // Rotate camera around the center
+            const spherical = new THREE.Spherical();
+            spherical.setFromVector3(this.camera.position);
+            spherical.theta -= deltaMove.x * rotationSpeed;
+            spherical.phi += deltaMove.y * rotationSpeed;
+            spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+            this.camera.position.setFromSpherical(spherical);
+            this.camera.lookAt(0, 0, 0);
+            previousMousePosition = {
+              x: e.clientX,
+              y: e.clientY
+            };
+          }
+        });
+        canvas.addEventListener('mouseup', () => {
+          isDragging = false;
+        });
+        canvas.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const zoomSpeed = 0.1;
+          const direction = this.camera.position.clone().normalize();
+          this.camera.position.add(direction.multiplyScalar(e.deltaY * zoomSpeed));
+          // Limit zoom
+          const distance = this.camera.position.length();
+          if (distance < 5) {
+            this.camera.position.setLength(5);
+          } else if (distance > 50) {
+            this.camera.position.setLength(50);
+          }
+        });
+      }
+      generateMockData() {
+        const tickers = [
+          'AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA',
+          'META', 'NVDA', 'NFLX', 'ORCL', 'ADBE',
+          'CRM', 'UBER', 'SHOP', 'SPOT', 'ZOOM',
+          'SQ', 'TWTR', 'SNAP', 'LYFT', 'ROKU',
+          'PINS', 'ZM', 'DOCU', 'OKTA', 'SNOW'
+        ];
+        this.stocks = tickers.map(ticker => ({
+          ticker,
+          price: Math.random() * 500 + 50,
+          change: (Math.random() - 0.5) * 20,
+          volume: Math.random() * 100000000 + 1000000,
+          marketCap: Math.random() * 2000000000000 + 10000000000
+        }));
+      }
+      buildCity() {
+        // Clear existing buildings
+        this.buildings.forEach(building => {
+          this.scene.remove(building);
+        });
+        this.buildings = [];
+        const gridSize = 5;
+        const spacing = 2.5;
+        this.stocks.forEach((stock, index) => {
+          const x = (index % gridSize - 2) * spacing;
+          const z = (Math.floor(index / gridSize) - 2) * spacing;
+          // Building height based on market cap (logarithmic scale)
+          const height = Math.max(0.5, Math.log(stock.marketCap / 1000000000) * 1.5);
+          // Building color based on price change
+          const color = stock.change >= 0 ? 0x10b981 : 0xef4444;
+          const intensity = Math.min(Math.abs(stock.change) / 10, 1);
+          const baseColor = stock.change >= 0 ?
+            new THREE.Color(0x10b981).lerp(new THREE.Color(0x22c55e), intensity) :
+            new THREE.Color(0xef4444).lerp(new THREE.Color(0xdc2626), intensity);
+          // Create building
+          const geometry = new THREE.BoxGeometry(0.8, height, 0.8);
+          const material = new THREE.MeshLambertMaterial({
+            color: baseColor,
+            transparent: true,
+            opacity: 0.9
+          });
+          const building = new THREE.Mesh(geometry, material);
+          building.position.set(x, height / 2, z);
+          building.castShadow = true;
+          building.receiveShadow = true;
+          // Store stock data in userData
+          building.userData = stock;
+          // Add pulsing animation for high volume stocks
+          if (stock.volume > 50000000) {
+            building.userData.shouldPulse = true;
+          }
+          this.scene.add(building);
+          this.buildings.push(building);
+        });
+        this.updateMarketStats();
+        this.render();
+      }
+      updateMarketStats() {
+        const gainers = this.stocks.filter(s => s.change > 0).length;
+        const losers = this.stocks.filter(s => s.change < 0).length;
+        document.getElementById('gainers').textContent = gainers;
+        document.getElementById('losers').textContent = losers;
+        document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+      }
+      setupEventListeners() {
+        // Click detection for buildings
+        this.renderer.domElement.addEventListener('click', (event) => {
+          this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+          this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+          this.raycaster.setFromCamera(this.mouse, this.camera);
+          const intersects = this.raycaster.intersectObjects(this.buildings);
+          if (intersects.length > 0) {
+            this.selectBuilding(intersects[0].object);
+          }
+        });
+        // Control buttons
+        document.getElementById('toggle-auto-update').addEventListener('click', () => {
+          this.toggleAutoUpdate();
+        });
+        document.getElementById('manual-update').addEventListener('click', () => {
+          this.updateData();
+        });
+        document.getElementById('close-panel').addEventListener('click', () => {
+          this.hideInfoPanel();
+        });
+        // Window resize
+        window.addEventListener('resize', () => {
+          this.camera.aspect = window.innerWidth / window.innerHeight;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+      }
+      selectBuilding(building) {
+        // Reset previous selection
+        if (this.selectedBuilding) {
+          this.selectedBuilding.material.emissive.setHex(0x000000);
+        }
+        // Highlight new selection
+        this.selectedBuilding = building;
+        building.material.emissive.setHex(0x333333);
+        // Show info panel
+        this.showStockInfo(building.userData);
+      }
+      showStockInfo(stock) {
+        const panel = document.getElementById('info-panel');
+        const changePercent = ((stock.change / stock.price) * 100).toFixed(2);
+        const changeClass = stock.change >= 0 ? 'stock-positive' : 'stock-negative';
+        document.getElementById('stock-ticker').textContent = stock.ticker;
+        document.getElementById('stock-price').textContent = `$${stock.price.toFixed(2)}`;
+        document.getElementById('stock-change').innerHTML =
+          `<span class="${changeClass}">$${stock.change.toFixed(2)} (${changePercent}%)</span>`;
+        document.getElementById('stock-volume').textContent =
+          this.formatLargeNumber(stock.volume);
+        document.getElementById('stock-cap').textContent =
+          `$${this.formatLargeNumber(stock.marketCap)}`;
+        panel.classList.remove('hidden');
+      }
+      hideInfoPanel() {
+        document.getElementById('info-panel').classList.add('hidden');
+        if (this.selectedBuilding) {
+          this.selectedBuilding.material.emissive.setHex(0x000000);
+          this.selectedBuilding = null;
+        }
+      }
+      formatLargeNumber(num) {
+        if (num >= 1e12) return (num / 1e12).toFixed(1) + 'T';
+        if (num >= 1e9) return (num / 1e9).toFixed(1) + 'B';
+        if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+        if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+        return num.toString();
+      }
+      updateData() {
+        // Simulate new market data
+        this.stocks.forEach(stock => {
+          const changePercent = (Math.random() - 0.5) * 0.1; // ±5% change
+          stock.price *= (1 + changePercent);
+          stock.change = stock.price * changePercent;
+          stock.volume = Math.random() * 100000000 + 1000000;
+        });
+        this.buildCity();
+      }
+      toggleAutoUpdate() {
+        this.autoUpdate = !this.autoUpdate;
+        const button = document.getElementById('toggle-auto-update');
+        button.textContent = `Auto Update: ${this.autoUpdate ? 'ON' : 'OFF'}`;
+        if (this.autoUpdate) {
+          this.startAutoUpdate();
+        } else {
+          this.stopAutoUpdate();
+        }
+      }
+      startAutoUpdate() {
+        this.updateInterval = setInterval(() => {
+          if (this.autoUpdate) {
+            this.updateData();
+          }
+        }, 5000); // Update every 5 seconds
+      }
+      stopAutoUpdate() {
+        if (this.updateInterval) {
+          clearInterval(this.updateInterval);
+          this.updateInterval = null;
+        }
+      }
+      animate() {
+        requestAnimationFrame(() => this.animate());
+        // Animate pulsing buildings
+        this.buildings.forEach(building => {
+          if (building.userData.shouldPulse) {
+            const time = Date.now() * 0.005;
+            building.material.opacity = 0.7 + Math.sin(time) * 0.2;
+          }
+        });
+        this.render();
+      }
+      render() {
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+    // Initialize the application
+    const metropolis = new MarketMetropolis();
+    metropolis.animate();
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      switch (e.key) {
+        case 'u':
+        case 'U':
+          metropolis.updateData();
+          break;
+        case 'Escape':
+          metropolis.hideInfoPanel();
+          break;
+      }
+    });
+  </script>
+</body>
+
+</html>
